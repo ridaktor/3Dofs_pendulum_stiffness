@@ -1,0 +1,139 @@
+!**** This script builds a model of two beams with given dimensions
+!**** (lenght, width, thickness and spacing) and calculates the component
+!**** of the stiffness coefficient matrix for three DOFs of the pendulum
+!**** suspension accelerometer.
+!****
+!****Stiffness coefficient matrix:
+!****|K11 K21 K31|
+!****|K12 K22 K32|
+!****|K13 K23 K33|
+
+FINISH
+/CLEAR
+
+/PREP7
+	!Material properties
+		ET,1,186 !3D-solid element
+		MP,EX,1,7.306E10
+		MP,NUXY,1,0.1549
+
+	!Beams dimensions
+		FBL = 2.3E-3 			!First beam lenght
+		SBL = 2.3E-3			!Second beam lenght
+		FBW = 2.46E-3 		!First beam width
+		SBW = 2.46E-3 		!Second beam width
+		FBT = 34E-6 			!First beam thickness
+		SBT = 34E-6			!Second beam thickness
+		BCS = 7.64E-3 			!Beams center spacing
+	
+	!Creating beams bodies
+	*IF,FBL,EQ,SBL,THEN
+		BLOCK,BCS/2-FBW/2,BCS/2+FBW/2,,FBL,-(FBT/2),FBT/2
+		BLOCK,-BCS/2-SBW/2,-BCS/2+SBW/2,,SBL,-(SBT/2),SBT/2
+	*ELSEIF,FBL,GT,SBL,THEN
+		BLOCK,BCS/2-FBW/2,BCS/2+FBW/2,,FBL,-(FBT/2),FBT/2
+		BLOCK,-BCS/2-SBW/2,-BCS/2+SBW/2,(FBL-SBL)/2,SBL+(FBL-SBL)/2,-(SBT/2),SBT/2
+	*ELSEIF,FBL,LT,SBL,THEN
+		BLOCK,BCS/2-FBW/2,BCS/2+FBW/2,(SBL-FBL)/2,FBL+(SBL-FBL)/2,-(FBT/2),FBT/2
+		BLOCK,-BCS/2-SBW/2,-BCS/2+SBW/2,,SBL,-(SBT/2),SBT/2
+	*ENDIF
+	!Meshing
+		LSEL,S,LENGTH,,FBT
+		LSEL,A,LENGTH,,SBT
+		LESIZE,ALL,,,3
+		LSEL,INVE
+		LESIZE,ALL,5e-5
+		ALLSEL,ALL
+		TYPE,1
+		MAT,1
+		VMESH,1,2
+
+	!MPC
+		*SET,Tid,4
+		*SET,Cid,3
+		ET,Cid,174
+		ET,Tid,170
+		KEYO,Tid,2,1
+		KEYO,Tid,4,111111
+		KEYO,Cid,12,5              ! Bonded Contact
+		KEYO,Cid,4,2               ! Rigid CERIG style load
+		KEYO,Cid,2,2
+		N,,0,0,0                   ! Pilot node
+		*GET,Pilot_node,NODE,,NUM,MAX
+		ASEL,S,AREA,,3
+		ASEL,A,AREA,,9
+		AATT,Cid,Cid,Tid
+		AATT,Tid,Cid,Cid
+		AMESH,ALL
+		*SET,_npilot,Pilot_node
+		TYPE,Tid
+		MAT,Cid
+		REAL,Cid
+		TSHAPE,pilo
+		NSEL,S,NODE,,Pilot_node
+		*GET,Conected_node,NODE,,NXTL
+		EN,Conected_node-1,_npilot
+		TSHAPE
+		
+	!BC - Fixed support
+		ALLSEL,ALL
+		ASEL,S,AREA,,4
+		ASEL,A,AREA,,10
+		NSLA,R,1
+		D,ALL,ALL,0
+		ALLSEL,ALL
+FINISH
+
+/SOLU
+	!First load step
+		NSEL,S,NODE,,Pilot_node
+		D,ALL,uz,1
+		D,ALL,rotx,0
+		D,ALL,roty,0
+		ALLSEL,ALL
+		NSUB,1,1,1
+		TIME,1.
+		SOLVE
+
+	!Second load step
+		NSEL,S,NODE,,Pilot_node
+		DDEL,ALL,uz,,,FORCE
+		DDEL,ALL,rotx,,,FORCE
+		DDEL,ALL,roty,,,FORCE
+		D,ALL,uz,0
+		D,ALL,rotx,1
+		D,ALL,roty,0
+		ALLSEL,ALL
+		NSUB,1,1,1
+		TIME,2.
+		SOLVE
+
+	!Third load step
+		NSEL,S,NODE,,Pilot_node
+		DDEL,ALL,uz,,,FORCE
+		DDEL,ALL,rotx,,,FORCE
+		DDEL,ALL,roty,,,FORCE
+		D,ALL,uz,0
+		D,ALL,rotx,0
+		D,ALL,roty,1
+		ALLSEL,ALL
+		NSUB,1,1,1
+		TIME,3.
+		SOLVE
+FINISH
+
+/POST1
+	SET,FIRST	   
+	NSEL,S,LOC,X,0
+	*GET,K11,NODE,Pilot_node,RF,FZ
+	*GET,K12,NODE,Pilot_node,RF,MX
+	*GET,K13,NODE,Pilot_node,RF,MY
+	SET,NEXT
+	*GET,K21,NODE,Pilot_node,RF,FZ
+	*GET,K22,NODE,Pilot_node,RF,MX
+	*GET,K23,NODE,Pilot_node,RF,MY
+	SET,NEXT
+	*GET,K31,NODE,Pilot_node,RF,FZ
+	*GET,K32,NODE,Pilot_node,RF,MX
+	*GET,K33,NODE,Pilot_node,RF,MY
+FINISH
